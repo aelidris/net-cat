@@ -8,6 +8,23 @@ import (
 	"strings"
 )
 
+// Usage:
+// Start the server:
+// yaml
+// Copy code
+// $ go run server.go 8989
+// Listening on the port: 8989
+// Connect clients:
+// go
+// Copy code
+// $ go run client.go localhost 8989
+
+
+
+
+
+
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("[USAGE]: ./client $IP $port")
