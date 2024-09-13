@@ -41,8 +41,8 @@ func (s *Server) Run() {
 			s.mutex.Lock()
 			s.clients[client] = true
 			s.mutex.Unlock()
-			s.broadcastMessage(fmt.Sprintf("%s has joined our chat...", client.name))
-			s.sendPreviousMessages(client)
+			log.Printf("New client registered: %s\n", client.name)
+			s.broadcast <- fmt.Sprintf("%s has joined our chat...", client.name)
 		case client := <-s.unregister:
 			s.mutex.Lock()
 			if _, ok := s.clients[client]; ok {
@@ -50,8 +50,10 @@ func (s *Server) Run() {
 				close(client.outgoing)
 			}
 			s.mutex.Unlock()
-			s.broadcastMessage(fmt.Sprintf("%s has left our chat...", client.name))
+			log.Printf("Client unregistered: %s\n", client.name)
+			s.broadcast <- fmt.Sprintf("%s has left our chat...", client.name)
 		case message := <-s.broadcast:
+			log.Printf("Broadcasting message: %s\n", message)
 			s.mutex.Lock()
 			for client := range s.clients {
 				select {
@@ -64,14 +66,6 @@ func (s *Server) Run() {
 			s.mutex.Unlock()
 		}
 	}
-}
-
-func (s *Server) broadcastMessage(message string) {
-	s.broadcast <- message
-}
-
-func (s *Server) sendPreviousMessages(client *Client) {
-	// Implement logic to send previous messages to the new client
 }
 
 func (s *Server) handleClient(conn net.Conn) {
@@ -116,10 +110,12 @@ func (s *Server) handleClient(conn net.Conn) {
 		return
 	}
 
+	log.Printf("New client connected: %s\n", client.name)
+
 	s.register <- client
 
-	go s.readMessages(client)
-	s.writeMessages(client)
+	go s.writeMessages(client)
+	s.readMessages(client)
 }
 
 func (s *Server) readMessages(client *Client) {
@@ -127,12 +123,14 @@ func (s *Server) readMessages(client *Client) {
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
+			log.Printf("Error reading message from %s: %v\n", client.name, err)
 			break
 		}
 		message = strings.TrimSpace(message)
 		if message != "" {
 			formattedMessage := fmt.Sprintf("[%s][%s]:%s", time.Now().Format("2006-01-02 15:04:05"), client.name, message)
-			s.broadcastMessage(formattedMessage)
+			log.Printf("Received message from %s: %s\n", client.name, message)
+			s.broadcast <- formattedMessage
 		}
 	}
 	s.unregister <- client
@@ -142,13 +140,14 @@ func (s *Server) writeMessages(client *Client) {
 	for message := range client.outgoing {
 		_, err := client.conn.Write([]byte(message + "\n"))
 		if err != nil {
+			log.Printf("Error sending message to %s: %v\n", client.name, err)
 			break
 		}
 	}
 }
 
 func main() {
-	port := "8990"
+	port := "8989"
 	if len(os.Args) > 1 {
 		if len(os.Args) != 2 {
 			fmt.Println("[USAGE]: ./TCPChat $port")
