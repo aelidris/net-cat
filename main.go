@@ -94,7 +94,7 @@ func handleClient(conn net.Conn) {
 	mutex.Unlock()
 
 	// Inform other clients of the new connection
-	joinMessage := fmt.Sprintf("[%s][%s] has joined the chat", time.Now().Format("2006-01-02 15:04:05"), name)
+	joinMessage := fmt.Sprintf("%s has joined our chat...", name)
 	broadcastMessage(joinMessage, conn)
 
 	// Send previous messages to the new client
@@ -120,7 +120,7 @@ func handleClient(conn net.Conn) {
 	mutex.Lock()
 	delete(clients, conn)
 	mutex.Unlock()
-	leaveMessage := fmt.Sprintf("[%s][%s] has left the chat", time.Now().Format("2006-01-02 15:04:05"), name)
+	leaveMessage := fmt.Sprintf("%s has left our chat...", name)
 	broadcastMessage(leaveMessage, conn)
 }
 
