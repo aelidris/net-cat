@@ -40,10 +40,17 @@ func broadcastMessage(message string, exclude net.Conn) {
 	defer mutex.Unlock()
 
 	messages = append(messages, message) // Store the message
-	for conn := range clients {
+	for conn, client := range clients {
+		InitialMessage := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), client.username)
+		test := false
 		if conn != exclude { // Exclude sender from receiving its own message
-			conn.Write([]byte(message + "\n"))
+			conn.Write([]byte("\n" + message + "\n"))
+			test = true
 		}
+		if test {
+			conn.Write([]byte(InitialMessage))
+		}
+
 	}
 }
 
@@ -97,6 +104,7 @@ func handleClient(conn net.Conn) {
 	// Inform other clients of the new connection
 	joinMessage := fmt.Sprintf("\n%s has joined our chat...", name)
 	broadcastMessage(joinMessage, conn)
+	InitialMessage := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), name)
 
 	// Send previous messages to the new client
 	for _, msg := range messages {
@@ -108,8 +116,7 @@ func handleClient(conn net.Conn) {
 
 	// Listen for messages from the client
 	for {
-		aff := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), name)
-		conn.Write([]byte(aff))
+		conn.Write([]byte(InitialMessage))
 
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -121,6 +128,7 @@ func handleClient(conn net.Conn) {
 			formattedMessage := fmt.Sprintf("[%s][%s]: %s", time.Now().Format("2006-01-02 15:04:05"), name, message)
 			broadcastMessage(formattedMessage, conn)
 		}
+
 	}
 
 	// Client has left
