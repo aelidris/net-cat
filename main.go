@@ -102,7 +102,7 @@ func handleClient(conn net.Conn) {
 	mutex.Unlock()
 
 	// Inform other clients of the new connection
-	joinMessage := fmt.Sprintf("\n%s has joined our chat...", name)
+	joinMessage := fmt.Sprintf("%s has joined our chat...", name)
 	broadcastMessage(joinMessage, conn)
 	InitialMessage := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), name)
 
