@@ -26,7 +26,7 @@ type Server struct {
 }
 
 // Maximum connections allowed
-const maxConnections = 10
+const maxConnections = 2
 
 var (
 	clients  = make(map[net.Conn]Client)
@@ -86,6 +86,7 @@ func handleClient(conn net.Conn) {
 	if len(clients) >= maxConnections {
 		conn.Write([]byte("Server is full. Try again later.\n"))
 		mutex.Unlock()
+		conn.Close() // Close the connection after sending the message
 		return
 	}
 
@@ -99,6 +100,9 @@ func handleClient(conn net.Conn) {
 
 	// Send previous messages to the new client
 	for _, msg := range messages {
+		if msg == joinMessage {
+			continue
+		}
 		conn.Write([]byte(msg + "\n"))
 	}
 
@@ -192,11 +196,6 @@ func main() {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("Error accepting connection:", err)
-			continue
-		}
-		if len(server.clients) >= maxConnections {
-			conn.Write([]byte("Server is full. Try again later.\n"))
-			conn.Close()
 			continue
 		}
 		go handleClient(conn)
