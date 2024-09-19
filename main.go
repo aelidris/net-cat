@@ -14,7 +14,7 @@ import (
 type Client struct {
 	conn     net.Conn
 	username string
-	outgoing chan string
+	outgoing chan string //  Its role is to send messages from the server to the client asynchronously.
 }
 
 type Server struct {
@@ -93,7 +93,6 @@ func handleClient(conn net.Conn) {
 	if len(clients) >= maxConnections {
 		conn.Write([]byte("Server is full. Try again later.\n"))
 		mutex.Unlock()
-		conn.Close() // Close the connection after sending the message
 		return
 	}
 
@@ -196,7 +195,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error starting server:", err)
 	}
-	defer listener.Close()
+	defer listener.Close() // free up the resources associated with the listener, including the open port.
 
 	fmt.Println("Listening on the port :" + port)
 
