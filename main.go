@@ -14,50 +14,36 @@ import (
 type Client struct {
 	conn     net.Conn
 	username string
-	outgoing chan string //  Its role is to send messages from the server to the client asynchronously.
 }
 
-type Server struct {
-	clients    map[*Client]bool
-	broadcast  chan string
-	register   chan *Client
-	unregister chan *Client
-	mutex      sync.Mutex
-}
-
-// Maximum connections allowed
-const maxConnections = 2
+const maxClients = 2 // Max number of clients
 
 var (
 	clients  = make(map[net.Conn]Client)
-	messages = []string{} // Store all previous messages
-	mutex    sync.Mutex   // Ensure safe access to shared data
+	messages []string // Stores chat history
+	mutex    sync.Mutex
 )
 
-// Broadcast message to all clients
+// Broadcast a message to all clients except the sender
 func broadcastMessage(message string, exclude net.Conn) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
 	messages = append(messages, message) // Store the message
-	for conn, client := range clients {
-		test := false
-		if conn != exclude { // Exclude sender from receiving its own message
-			conn.Write([]byte("\n" + message + "\n"))
-			test = true
-		}
-		if test {
-			InitialMessage := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), client.username)
-			conn.Write([]byte(InitialMessage))
-		}
 
+	for conn, client := range clients {
+		if conn != exclude { // Don't send the message to the sender
+			conn.Write([]byte("\n" + message + "\n"))
+			// Prompt the user again after a message
+			conn.Write([]byte(fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), client.username)))
+		}
 	}
 }
 
-// Handle each client connection
+// Handle client connection
 func handleClient(conn net.Conn) {
 	defer conn.Close()
 
+	// Greet client and prompt for name
 	// Send welcome message and get client name
 	welcomeMessage := "Welcome to TCP-Chat!\n" +
 		"         _nnnn_\n" +
@@ -75,22 +61,21 @@ func handleClient(conn net.Conn) {
 		" |    .       | ' \\Zq\n" +
 		"_)      \\.___.,|     .'\n" +
 		"\\____   )MMMMMP|   .'\n" +
-		"     -'       --'\n" +
-		"[ENTER YOUR NAME]: "
-	conn.Write([]byte(welcomeMessage))
+		"     -'       --'\n"
+	conn.Write([]byte(welcomeMessage + "Welcome to TCP-Chat!\n[ENTER YOUR NAME]: "))
 	reader := bufio.NewReader(conn)
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
-	// Ensure non-empty name
+	// Ensure a valid name
 	if name == "" {
 		conn.Write([]byte("Name cannot be empty.\n"))
 		return
 	}
 
-	// Check if the server is full
+	// Check if server is full
 	mutex.Lock()
-	if len(clients) >= maxConnections {
+	if len(clients) >= maxClients {
 		conn.Write([]byte("Server is full. Try again later.\n"))
 		mutex.Unlock()
 		return
@@ -100,95 +85,42 @@ func handleClient(conn net.Conn) {
 	clients[conn] = Client{conn: conn, username: name}
 	mutex.Unlock()
 
-	// Inform other clients of the new connection
-	joinMessage := fmt.Sprintf("%s has joined our chat...", name)
-	broadcastMessage(joinMessage, conn)
+	// Notify others of the new connection
+	join := fmt.Sprintf("%s has joined the chat", name)
+	broadcastMessage(join, conn)
 
-	// Send previous messages to the new client
+	// Send chat history to the new client
 	for _, msg := range messages {
-		if msg == joinMessage {
+		if msg == join {
 			continue
 		}
 		conn.Write([]byte(msg + "\n"))
 	}
 
-	// Listen for messages from the client
+	// Listen for messages from this client
 	for {
-		InitialMessage := fmt.Sprintf("[%s][%s]: ", time.Now().Format("2006-01-02 15:04:05"), name)
-
-		conn.Write([]byte(InitialMessage))
-
+		conn.Write([]byte(fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), name)))
 		message, err := reader.ReadString('\n')
 		if err != nil {
-			// Client disconnected
-			break
+			break // Client disconnected
 		}
+
 		message = strings.TrimSpace(message)
 		if message != "" {
-			formattedMessage := fmt.Sprintf("[%s][%s]: %s", time.Now().Format("2006-01-02 15:04:05"), name, message)
-			broadcastMessage(formattedMessage, conn)
+			broadcastMessage(fmt.Sprintf("[%s][%s]:%s", time.Now().Format("2006-01-02 15:04:05"), name, message), conn)
 		}
-
 	}
 
-	// Client has left
+	// Notify others when the client leaves
 	mutex.Lock()
 	delete(clients, conn)
 	mutex.Unlock()
-	leaveMessage := fmt.Sprintf("%s has left our chat...", name)
-	broadcastMessage(leaveMessage, conn)
-}
-
-func (s *Server) Run() {
-	for {
-		select {
-		case client := <-s.register:
-			s.mutex.Lock()
-			s.clients[client] = true
-			s.mutex.Unlock()
-			log.Printf("New client registered: %s\n", client.username)
-			s.broadcast <- fmt.Sprintf("%s has joined our chat...", client.username)
-		case client := <-s.unregister:
-			s.mutex.Lock()
-			if _, ok := s.clients[client]; ok {
-				delete(s.clients, client)
-				close(client.outgoing)
-			}
-			s.mutex.Unlock()
-			log.Printf("Client unregistered: %s\n", client.username)
-			s.broadcast <- fmt.Sprintf("%s has left our chat...", client.username)
-		case message := <-s.broadcast:
-			log.Printf("Broadcasting message: %s\n", message)
-			s.mutex.Lock()
-			for client := range s.clients {
-				select {
-				case client.outgoing <- message:
-				default:
-					close(client.outgoing)
-					delete(s.clients, client)
-				}
-			}
-			s.mutex.Unlock()
-		}
-	}
-}
-
-func NewServer() *Server {
-	return &Server{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan string),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-	}
+	broadcastMessage(fmt.Sprintf("%s has left the chat", name), conn)
 }
 
 func main() {
 	port := "8989"
 	if len(os.Args) > 1 {
-		if len(os.Args) != 2 {
-			fmt.Println("[USAGE]: ./TCPChat $port")
-			return
-		}
 		port = os.Args[1]
 	}
 
@@ -196,13 +128,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Error starting server:", err)
 	}
-	defer listener.Close() // free up the resources associated with the listener, including the open port.
+	defer listener.Close()
 
-	fmt.Println("Listening on the port :" + port)
+	fmt.Println("Listening on port:", port)
 
-	server := NewServer()
-	go server.Run()
-
+	// Accept and handle connections
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
