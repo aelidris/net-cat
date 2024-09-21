@@ -32,9 +32,9 @@ func broadcastMessage(message string, exclude net.Conn) {
 
 	for conn, client := range clients {
 		if conn != exclude { // Don't send the message to the sender
-			conn.Write([]byte("\n" + message + "\n"))
+			prompt := fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), client.username)
+			conn.Write([]byte("\n" + message + "\n"+ prompt))
 			// Prompt the user again after a message
-			conn.Write([]byte(fmt.Sprintf("[%s][%s]:", time.Now().Format("2006-01-02 15:04:05"), client.username)))
 		}
 	}
 }
@@ -87,15 +87,12 @@ func handleClient(conn net.Conn) {
 
 	// Notify others of the new connection
 	join := fmt.Sprintf("%s has joined the chat", name)
-	broadcastMessage(join, conn)
-
 	// Send chat history to the new client
 	for _, msg := range messages {
-		if msg == join {
-			continue
-		}
 		conn.Write([]byte(msg + "\n"))
 	}
+
+	broadcastMessage(join, conn)
 
 	// Listen for messages from this client
 	for {
@@ -120,7 +117,7 @@ func handleClient(conn net.Conn) {
 
 func main() {
 	port := "8989"
-	if len(os.Args) > 1 {
+	if len(os.Args) > 1 && os.Args[1] != "" {
 		if len(os.Args) != 2 {
 			fmt.Println("[USAGE]: ./TCPChat $port")
 			return
