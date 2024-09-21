@@ -121,6 +121,10 @@ func handleClient(conn net.Conn) {
 func main() {
 	port := "8989"
 	if len(os.Args) > 1 {
+		if len(os.Args) != 2 {
+			fmt.Println("[USAGE]: ./TCPChat $port")
+			return
+		}
 		port = os.Args[1]
 	}
 
